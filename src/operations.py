@@ -1,5 +1,6 @@
 ﻿"""
 主要功能实现逻辑，包括批量转存和分享。
+添加功能：实现多级目录转存，自动创建多级目录实现存放。截取目录中txt文件名中的部分字符串，为最后一级子目录名。
 
 :author: assassing
 :contact: https://github.com/hxz393
@@ -325,3 +326,85 @@ class Operations:
 
         # 最后插入转存结果到日志框
         self.insert_logs(f'{ERROR_CODES.get(result, f"转存失败，错误代码（{result}）")}：{url_code} {file_info}')
+
+    def get_all_txt_files(self, directory):
+        """递归获取指定目录及其子目录下所有 .txt 文件的路径列表"""
+        txt_files = []
+        for root, _, files in os.walk(directory):
+            for filename in files:
+                if filename.endswith(".txt"):
+                    txt_files.append(os.path.join(root, filename))
+        return txt_files
+    
+    def read_txt_file(self,file_path):
+        """读取 .txt 文件的内容，返回文件名和文件中的链接列表。"""
+        with open(file_path, 'r', encoding='utf-8') as file:
+            links = file.readlines()
+        return os.path.splitext(os.path.basename(file_path))[0], [link.strip() for link in links]
+    
+    # def create_dir_on_baidu_pans(self, folder_name):
+    #     """在网盘中创建以文件名命名的目录"""
+    #     result = self.network.get_dir_list(f'/{folder_name}')
+    #     if isinstance(result, int):
+    #         return_code = self.network.create_dir(folder_name)
+    #         return return_code == 0
+    #     return False
+    
+    def save_links_from_txt(self, links):
+        """批量转存 .txt 文件中的链接到指定目录"""
+        for link in links:
+            self.process_save(f"{link} ")
+            time.sleep(0.5)  # 适当延迟防止请求过快
+
+    def batch_save_from_txt_directory(self, txt_directory):
+        """批量读取指定目录下的所有 .txt 文件并转存其中的链接到网盘"""
+        try:
+            self.prepare_run()
+            txt_files = self.get_all_txt_files(txt_directory)
+            for txt_file in txt_files:
+                relative_path = os.path.relpath(txt_file, txt_directory) #获取相对路径
+                folder_name = self.extract_person_name(relative_path) #对文件名进行处理
+                with open(txt_file, 'r', encoding='utf-8') as file:
+                    links = [link.strip() for link in file.readlines()]
+                # folder_name, links = self.read_txt_file(txt_file)
+                if not folder_name:
+                    continue
+                ##
+                created_folder_name = self.create_multi_level_dir(folder_name)
+                self.folder_name = created_folder_name
+                self.setup_save()
+                #self.handle_create_dir(folder_name)
+                self.save_links_from_txt(links)
+        except Exception as e:
+            self.insert_logs(f'程序出现未预料错误，信息如下：\n{e}\n{traceback.format_exc()}')
+        finally:
+            self.network.s.close()
+            self.change_status('stopped')
+
+    def create_multi_level_dir(self, folder_path):
+        """在网盘中创建多级目录"""
+        # 将路径分割成单个目录名
+        folders = folder_path.split(os.sep)
+        current_path = ""
+        for folder in folders:
+            current_path = os.path.join(current_path, folder) if current_path else folder
+            # 检查目录是否存在，不存在则创建
+            result = self.network.get_dir_list(f'/{current_path}')
+            if isinstance(result, int):
+                return_code = self.network.create_dir(current_path)
+                self.check_condition(return_code != 0, message=f'创建目录失败，错误代码：{return_code}')
+        return current_path
+
+    def extract_person_name(self, file_path):
+        """从文件路径中提取人名部分"""
+        # 获取文件名（不包含路径）
+        filename = os.path.basename(file_path)
+        # 去掉文件扩展名
+        filename_without_ext = os.path.splitext(filename)[0]
+        # 假设文件名格式为 "数字-人名"，提取人名部分
+        if '-' in filename_without_ext:
+            # 分割字符串并取最后一部分作为人名
+            person_name = filename_without_ext.split('-')[-1].strip()
+            return person_name
+        return filename_without_ext  # 如果格式不符合，返回原始文件名
+    
