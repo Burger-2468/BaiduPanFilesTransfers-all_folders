@@ -1,5 +1,6 @@
 ﻿"""
 把 UI 相关类集中在一起。
+添加了新按钮“批量转存 .txt 文件”
 
 :author: assassing
 :contact: https://github.com/hxz393
@@ -10,6 +11,8 @@ import re
 import webbrowser
 from typing import Callable
 
+import tkinter as tk
+from tkinter import filedialog
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 
@@ -61,6 +64,8 @@ class MainWindow(ttk.Window):
         self.frame_bottom.grid(row=init_row + 6, sticky='e', padx=MW_PADDING)
         self.bottom_share = self._create_button(LABEL_MAP['share'], self._share_button_click, 0)
         self.bottom_save = self._create_button(LABEL_MAP['save'], self._save_button_click, 1)
+        # 新增按钮：批量转存目录中的 .txt 文件
+        self.batch_save_txt = self._create_button("批量转存 .txt 文件", self._batch_save_txt_click, 2)
         # 状态标签
         # noinspection PyArgumentList
         self.label_status = ttk.Label(self, text=LABEL_MAP['help'], font=('', 10, 'underline'), bootstyle='primary', cursor='heart')
@@ -103,6 +108,17 @@ class MainWindow(ttk.Window):
     def _share_button_click(self) -> None:
         """当按钮被点击时，调用逻辑处理对象的批量分享方法"""
         self.op.share()
+
+    def _batch_save_txt_click(self) -> None:
+        """当点击批量转存 .txt 文件按钮时，调用逻辑处理对象的对应方法"""
+        root = tk.Tk()
+        root.withdraw()  # 隐藏主窗口
+        # 使用 tkinter 的 filedialog 来选择目录
+        txt_directory = filedialog.askdirectory()
+        # 销毁隐藏的主窗口
+        root.destroy()
+        if txt_directory:
+            thread_it(self.op.batch_save_from_txt_directory, txt_directory)
 
     def run(self) -> None:
         """运行程序"""
